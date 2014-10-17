@@ -1,0 +1,13 @@
+{
+	"name": "sparkphase-couchbase-orm",
+	"version": "0.1.0",
+	"repository": "https://github.com/JonathanBristow/sparkphase-couchbase-orm",
+	"author": "Jonathan Bristow <jonathanbristow@me.com>",
+	"license": "MIT",
+	"main": "index",
+	"dependencies": {},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/JonathanBristow/sparkphase-couchbase-orm.git"
+	}
+}
