@@ -98,42 +98,44 @@ module.exports = function(Bucket) {
 					Reporter({
 						'Type': 'Debug',
 						'Group': 'ORM',
-						'Message': 'New Model '+Name+' Requested'
+						'Message': 'New '+Name+' Requested'
 					});
 					Resolve(Model.Structure('New'));
 				} else if (Method == "Blank") {
 					Reporter({
 						'Type': 'Debug',
 						'Group': 'ORM',
-						'Message': 'Blank Model '+Name+' Requested'
+						'Message': 'Blank '+Name+' Requested'
 					});
 					Resolve(Model.Structure('Blank'));									
 				} else if (Method == "Rebuild" && typeof Data == "object") {
 					Reporter({
 						'Type': 'Debug',
 						'Group': 'ORM',
-						'Message': 'Rebuilt Model '+Name+' Requested'
+						'Message': 'Rebuilt '+Name+' Requested'
 					});
 					Resolve(Merge(true, Model.Structure, Data));									
 				} else if (Method == "Find" && typeof Data == "string" && ID) {
 					Reporter({
 						'Type': 'Debug',
 						'Group': 'ORM',
-						'Message': 'Find Model '+Name+' Requested Using View '+Data+' And Key '+ID
+						'Message': 'Find "'+Name+'" With View "'+Model.ViewGroup+'.'+Data+'" And Key "'+ID+'"'
 					});
 					if (Model.Views.indexOf(Data) == 1) {
 						var Query = Me.ViewQuery.from(Model.ViewGroup, Data).stale(Me.ViewQuery.Update.BEFORE).key(ID);
 						Me.Query(Query).then(function(Document) {
 							if (Document) {
-								
-								/* Result Found */
-								
-								
+								Reporter({
+									'Type': 'Debug',
+									'Group': 'ORM',
+									'Message': Document.length+' Result(s) For "'+ID+'" Using View "'+Model.ViewGroup+'.'+Data+'"'
+								});							
+								Resolve();
 							} else {
 								Reporter({
 									'Type': 'Debug',
 									'Group': 'ORM',
-									'Message': 'No Results For '+ID+' In View: '+Model.ViewGroup+'.'+Data
+									'Message': 'No Results For "'+ID+'" Using View "'+Model.ViewGroup+'.'+Data+'"'
 								});							
 								Reject();
 							}	
