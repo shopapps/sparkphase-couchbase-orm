@@ -10,10 +10,44 @@ var RSVP	  = require('RSVP'),					// Promises Library
 	Merge     = require('extend'),				    // Function For Merging Objects
 	Flake     = require('flake-idgen'),  		    // Flake ID Generator
 	IntFormat = require('biguint-format'),			// Int Formatter For Flake
-	Moment    = require('moment');					// Date & Time Formatting Library
+	Moment    = require('moment'),					// Date & Time Formatting Library
+	Validator = require('validator'),				// Validation Library
+	BCrypt	  = require('bcrypt');					// BCrypt Hashing Library
+
+/* Used To Set Properties In Nested Objects By Path */
+function SetProperty (Obj, Path, Value) {
+	var PList = Path.split('.');
+	var PLength = PList.length;
+	for(var i = 0; i < PLength-1; i++) {
+	    var A = PList[i];
+	    if( !Obj[A] ) Obj[A] = {}
+	    Obj = Obj[A];
+	}		
+	Obj[PList[PLength-1]] = Value;
+}
+
+/* Used To Hash Strings */
+function Crypt(Value) {
+	return new RSVP.Promise(function(Resolve, Reject) {
+		BCrypt.genSalt(10, function(E, Salt) {
+			if (E) {
+				Reject();
+			} else {
+				BCrypt.hash(Value, Salt, function(E, Hash) {
+					if (E) {
+						Reject();
+					} else {
+						Resolve(Hash);
+					}
+				});
+			}		
+		});	
+	});
+};
 
 module.exports = function(Bucket) {
 	
+	/* ORM */
 	ORM = function() {
 		this.Bucket = {};
 		this.ViewQuery = {};
@@ -21,6 +55,7 @@ module.exports = function(Bucket) {
 		return this;
 	}
 	
+	/* Public Methods */	
 	ORM.prototype.Setup = function(Bucket, ViewQuery) {
 		this.Bucket = Bucket;
 		this.ViewQuery = ViewQuery;
@@ -33,7 +68,6 @@ module.exports = function(Bucket) {
 			Resolve();
 		});	
 	}
-			
 	ORM.prototype.Import = function(Models) {		
 		var Count = 0;
 		var Keys = Object.keys(Models);			
@@ -50,8 +84,7 @@ module.exports = function(Bucket) {
 				});					
 		    } 
 		}	
-	}	
-		
+	}			
 	ORM.prototype.Attr = function(Method, Type, Options) {
 		if (!Options) {
 			Options = {}
@@ -87,8 +120,7 @@ module.exports = function(Bucket) {
 				return "";
 			break;
 		}
-	}
-	
+	}	
 	ORM.prototype.Create = function(Method, Name, Data, ID) {
 		var Me = this;
 		return new RSVP.Promise(function(Resolve, Reject) {	
@@ -137,7 +169,7 @@ module.exports = function(Bucket) {
 									'Group': 'ORM',
 									'Message': 'No Results For "'+ID+'" Using View "'+Model.ViewGroup+'.'+Data+'"'
 								});							
-								Reject();
+								Reject('No Results');
 							}	
 						}, function() {							
 							Reporter({
@@ -145,7 +177,7 @@ module.exports = function(Bucket) {
 								'Group': 'ORM',
 								'Message': 'Error Performing Query'
 							});
-							Reject();							
+							Reject('Error Performing Query');							
 						});
 					} else {
 						Reporter({
@@ -153,7 +185,7 @@ module.exports = function(Bucket) {
 							'Group': 'ORM',
 							'Message': 'Invalid View Name Provided'
 						});
-						Reject();
+						Reject('Invalid View Name Provided');
 					}							
 				} else {
 					Reporter({
@@ -161,7 +193,7 @@ module.exports = function(Bucket) {
 						'Group': 'ORM',
 						'Message': 'Unknown Method Or Invalid Data Provided'
 					});
-					Reject();
+					Reject('Unknown Method Or Invalid Data Provided');
 				}
 			} else {
 				Reporter({
@@ -169,11 +201,10 @@ module.exports = function(Bucket) {
 					'Group': 'ORM',
 					'Message': 'Cannot Find Model '+Name
 				});
-				Reject();
+				Reject('Cannot Find Model');
 			}
 		});
 	}
-
 	ORM.prototype.Query = function(Query) {
 		var Me = this;
 		return new RSVP.Promise(function(Resolve, Reject) {
@@ -192,6 +223,77 @@ module.exports = function(Bucket) {
 					Resolve(Document);			
 				}	
 			});	
+		});
+	}	
+	ORM.prototype.Set = function(Obj, Path, Value, Type, Options) {
+		var Me = this;
+		return new RSVP.Promise(function(Resolve, Reject) {
+			if (!Obj) Reject('Invalid Object');
+			if (!Path) Reject('Invalid Path');
+			if (!Value) Reject('Invalid Value');
+			if (!Type) Reject('Invalid Type');
+			if (!Options) Options = {};
+			if (!Obj[Path]) {
+				SetProperty(Obj, Path, false);
+			}
+			switch (Type) {
+				case 'Email': 
+					if (Validator.isEmail(Value)) { 
+						SetProperty(Obj, Path, Value);
+						Resolve(Obj);
+					} else {
+						Reject('Invalid Email Address');
+					}
+				break;
+				case 'Password': 
+					if (Validator.isLength(Value, 6, 100)) {
+						Crypt(Value).then(function(Value) {
+							SetProperty(Obj, Path, Value);
+							Resolve(Obj);						
+						}, function() {
+							Reject('Unable To Crypt Password');;	
+						});
+					} else {
+						Reject('Invalid Password');;
+					}
+				break;				
+				case 'Date': 
+					if (Moment(Value).isValid()) {
+						SetProperty(Obj, Path, Value);
+						Resolve(Obj);
+					} else {
+						Reject('Invalid Date');;
+					}
+				break;
+				case 'String': 
+					/* Set Default Options */
+					if (!Options.Min) Options.Min = 1;
+					if (!Options.Max) Options.Max = 1000;
+					/* Validate */
+					if (Validator.isLength(Value, Options.Min, Options.Max)) { 
+						SetProperty(Obj, Path, Value);
+						Resolve(Obj);
+					} else {
+						Reject('Incorrect String Length');
+					}
+				break;
+				default:
+					/* Reject Promise */
+					Reject('Invalid Type');
+				break;
+			}
+		});
+	}
+	ORM.prototype.Save = function(ID, Obj) {
+		var Me = this;
+		return new RSVP.Promise(function(Resolve, Reject) {	
+			Me.Bucket.insert(ID, Obj, function(E, Result) {
+				if (E) {
+					Reject(E);
+				} else {
+					Resolve(Obj);
+				}
+			});
 		});
 	}
 	
