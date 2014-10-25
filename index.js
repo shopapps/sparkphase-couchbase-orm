@@ -69,7 +69,7 @@ module.exports = function(Bucket) {
 			Resolve();
 		});	
 	}
-	ORM.prototype.Import = function(Models) {		
+	ORM.prototype.Import = function(Models) {
 		var ModelCount = 0,
 			SliceCount = 0,
 			Keys = Object.keys(Models);			
@@ -102,10 +102,10 @@ module.exports = function(Bucket) {
 				 Reporter({
 					'Type': 'Information',
 					'Group': 'ORM',
-					'Message': SlicesCount+' Slices(s) Imported'
+					'Message': SliceCount+' Slices(s) Imported'
 				});					
 		    } 
-		}	
+		}
 	}			
 	ORM.prototype.Attr = function(Method, Type, Options) {
 		if (!Options) {
@@ -125,7 +125,7 @@ module.exports = function(Bucket) {
 						if (Options.Default) {return Options.Default;} else {return "";};
 					break;
 					case 'Date':
-						return Moment();
+						return new Date().toISOString();
 					break;
 					case 'Boolen':
 						return false;
@@ -134,12 +134,33 @@ module.exports = function(Bucket) {
 						return [];
 					break;
 					case 'Object':
-						return {};
+						if (Options.Contains) {
+							if (this.Slices[Options.Contains]) {
+								return this.Slices[Options.Contains].Structure('New');
+							} else {
+								Reporter({
+									'Type': 'Error',
+									'Group': 'ORM',
+									'Message':'Unable To Find Slice: '+Options.Contains
+								});
+								return {};
+							}							
+						} else {
+							return {};
+						}
 					break;
 				}
 			break;
 			case 'Blank':
 				return "";
+			break;
+			default:
+				Reporter({
+					'Type': 'Error',
+					'Group': 'ORM',
+					'Message':'Unknown Method: '+Method
+				});
+				return false;
 			break;
 		}
 	}	
