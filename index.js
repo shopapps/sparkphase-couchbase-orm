@@ -52,6 +52,7 @@ module.exports = function(Bucket) {
 		this.Bucket = {};
 		this.ViewQuery = {};
 		this.Models = {};
+		this.Slices = {};
 		return this;
 	}
 	
@@ -69,18 +70,39 @@ module.exports = function(Bucket) {
 		});	
 	}
 	ORM.prototype.Import = function(Models) {		
-		var Count = 0;
-		var Keys = Object.keys(Models);			
+		var ModelCount = 0,
+			SliceCount = 0,
+			Keys = Object.keys(Models);			
 		for (Index = 0; Index < Keys.length; ++Index) {
 		    if (Models[Keys[Index]]) {
-			   	this.Models[Keys[Index]] = Models[Keys[Index]];
-				Count++;
+		    	switch(Models[Keys[Index]].Type) {
+			    	case 'Model':
+			    		this.Models[Keys[Index]] = Models[Keys[Index]];
+						ModelCount++;
+			    	break;
+			    	case 'Slice':
+			    		this.Slices[Keys[Index]] = Models[Keys[Index]];
+						SliceCount++;
+			    	break;
+			    	default: 
+			    		Reporter({
+							'Type': 'Error',
+							'Group': 'ORM',
+							'Message':'Invalid Model Type'
+						});
+			    	break;
+		    	}		   	
 		    } 
 			if (Index+1 == Keys.length) {
 			    Reporter({
 					'Type': 'Information',
 					'Group': 'ORM',
-					'Message': Count+' Model(s) Imported'
+					'Message': ModelCount+' Model(s) Imported'
+				});	
+				 Reporter({
+					'Type': 'Information',
+					'Group': 'ORM',
+					'Message': SlicesCount+' Slices(s) Imported'
 				});					
 		    } 
 		}	
