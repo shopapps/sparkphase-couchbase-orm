@@ -45,6 +45,43 @@ function Crypt(Value) {
 	});
 };
 
+/* Used To Generate Flake IDs */
+function GenerateFlakeID() {
+	/* Generate ID */
+	var FlakeInstanse = new Flake();
+	return IntFormat(FlakeInstanse.next(), 'dec');	
+}
+
+/* Used To Save Documents To Couchbase */
+function SaveDocument(Bucket, Obj, Resolve, Reject) {
+	/* Attempt Save */
+	Bucket.insert(Obj.ID, Obj, function(E, Result) {
+		/* Check For Errors */
+		if (E) {
+			/* Is The ID Already In Use? */
+			if (E.code == 12) {
+				/* Generate New ID */
+				Obj.ID = GenerateFlakeID();
+				/* Retry */
+				Save(Bucket, Obj, Resolve, Reject);
+			} else {
+				/* Report */
+				Reporter({
+					'Type': 'Error',
+					'Group': 'ORM',
+					'Message':'Error Saving To Database',
+					'Detail': {Message: E, ID: Obj.ID, Document: Obj}
+				});
+				/* Reject */
+				Reject('Error Saving To Database');
+			}
+		} else {
+			/* Resolve */
+			Resolve(Obj);
+		}
+	});	
+}
+
 module.exports = function(Bucket) {
 	
 	/* ORM */
@@ -108,6 +145,7 @@ module.exports = function(Bucket) {
 		}
 	}			
 	ORM.prototype.Attr = function(Method, Type, Options) {
+		var Me = this;
 		if (!Options) {
 			Options = {}
 		};
@@ -118,8 +156,7 @@ module.exports = function(Bucket) {
 						if (Options.Default) {return Options.Default;} else {return "";};
 					break;
 					case 'UUID':
-						var ID = new Flake();
-						return IntFormat(ID.next(), 'dec');
+						return GenerateFlakeID();
 					break;
 					case 'String':
 						if (Options.Default) {return Options.Default;} else {return "";};
@@ -167,7 +204,11 @@ module.exports = function(Bucket) {
 	ORM.prototype.Create = function(Method, Name, Data, ID) {
 		var Me = this;
 		return new RSVP.Promise(function(Resolve, Reject) {	
-			if (Me.Models[Name]) {
+			/* We use a try here to catch any errors which get thrown when creating the models. 
+			   These are quite likly to come from the Attr() function.
+			*/
+			try {
+				if (Me.Models[Name]) {
 				var Model = Me.Models[Name];				
 				if (Method == "New") {
 					Reporter({
@@ -205,7 +246,7 @@ module.exports = function(Bucket) {
 									'Group': 'ORM',
 									'Message': Document.length+' Result(s) For "'+ID+'" Using View "'+Model.ViewGroup+'.'+Data+'"'
 								});							
-								Resolve();
+								Resolve(Document);
 							} else {
 								Reporter({
 									'Type': 'Debug',
@@ -239,13 +280,17 @@ module.exports = function(Bucket) {
 					Reject('Unknown Method Or Invalid Data Provided');
 				}
 			} else {
-				Reporter({
-					'Type': 'Debug',
-					'Group': 'ORM',
-					'Message': 'Cannot Find Model '+Name
-				});
-				Reject('Cannot Find Model');
-			}
+					Reporter({
+						'Type': 'Debug',
+						'Group': 'ORM',
+						'Message': 'Cannot Find Model '+Name
+					});
+					Reject('Cannot Find Model');
+				}
+			} catch (E) {
+				/* Reject With Caught Error */
+				Reject(E.message);
+			}		
 		});
 	}
 	ORM.prototype.Query = function(Query) {
@@ -268,13 +313,25 @@ module.exports = function(Bucket) {
 			});	
 		});
 	}	
+	ORM.prototype.ByID = function(ID) {
+		var Me = this;
+		return new RSVP.Promise(function(Resolve, Reject) {
+			Me.Bucket.get(ID, function(E, Document) {			
+				if (E) {
+					Reject(E);
+				} else {
+					Resolve(Document);
+				}
+			});	
+		});
+	}	
 	ORM.prototype.Set = function(Obj, Path, Value, Type, Options) {
 		var Me = this;
 		return new RSVP.Promise(function(Resolve, Reject) {
-			if (!Obj) Reject('Invalid Object');
-			if (!Path) Reject('Invalid Path');
-			if (!Value) Reject('Invalid Value');
-			if (!Type) Reject('Invalid Type');
+			if (!Obj) Reject('Missing Object');
+			if (!Path) Reject('Missing Path');
+			if (!Value) Reject('Missing Value');
+			if (!Type) Reject('Missing Type');
 			if (!Options) Options = {};
 			if (!Obj[Path]) {
 				SetProperty(Obj, Path, false);
@@ -327,16 +384,14 @@ module.exports = function(Bucket) {
 			}
 		});
 	}
-	ORM.prototype.Save = function(ID, Obj) {
+	ORM.prototype.Save = function(Obj) {
 		var Me = this;
-		return new RSVP.Promise(function(Resolve, Reject) {	
-			Me.Bucket.insert(ID, Obj, function(E, Result) {
-				if (E) {
-					Reject(E);
-				} else {
-					Resolve(Obj);
-				}
-			});
+		return new RSVP.Promise(function(Resolve, Reject) {
+			if (!Obj.ID) {
+				Reject('Invalid ID');
+			} else {
+				SaveDocument(Me.Bucket, Obj, Resolve, Reject);				
+			}
 		});
 	}
 	
