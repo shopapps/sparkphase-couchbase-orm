@@ -31,11 +31,23 @@ function Crypt(Value) {
 	return new RSVP.Promise(function(Resolve, Reject) {
 		BCrypt.genSalt(10, function(E, Salt) {
 			if (E) {
-				Reject();
+				Reject({
+					Message: 'Error Hashing String',
+					Code: {
+						App: 11001,
+						HTTP: 500
+					}
+				});	
 			} else {
 				BCrypt.hash(Value, Salt, function(E, Hash) {
 					if (E) {
-						Reject();
+						Reject({
+							Message: 'Error Hashing String',
+							Code: {
+								App: 11002,
+								HTTP: 500
+							}
+						});	
 					} else {
 						Resolve(Hash);
 					}
@@ -73,7 +85,13 @@ function SaveDocument(Bucket, Obj, Resolve, Reject) {
 					'Detail': {Message: E, ID: Obj.ID, Document: Obj}
 				});
 				/* Reject */
-				Reject('Error Saving To Database');
+				Reject({
+					Message: 'Error Saving To Database',
+					Code: {
+						App: 11003,
+						HTTP: 500
+					}
+				});	
 			}
 		} else {
 			/* Resolve */
@@ -253,15 +271,27 @@ module.exports = function(Bucket) {
 									'Group': 'ORM',
 									'Message': 'No Results For "'+ID+'" Using View "'+Model.ViewGroup+'.'+Data+'"'
 								});							
-								Reject('No Results');
+								Reject({
+									Message: 'No Results Returned',
+									Code: {
+										App: 11004,
+										HTTP: 200
+									}
+								});	
 							}	
 						}, function() {							
 							Reporter({
 								'Type': 'Debug',
 								'Group': 'ORM',
 								'Message': 'Error Performing Query'
-							});
-							Reject('Error Performing Query');							
+							});	
+							Reject({
+								Message: 'Error Performing Query',
+								Code: {
+									App: 11005,
+									HTTP: 500
+								}
+							});						
 						});
 					} else {
 						Reporter({
@@ -269,7 +299,13 @@ module.exports = function(Bucket) {
 							'Group': 'ORM',
 							'Message': 'Invalid View Name Provided'
 						});
-						Reject('Invalid View Name Provided');
+						Reject({
+							Message: 'Invalid View Name',
+							Code: {
+								App: 11006,
+								HTTP: 500
+							}
+						});	
 					}							
 				} else {
 					Reporter({
@@ -277,7 +313,13 @@ module.exports = function(Bucket) {
 						'Group': 'ORM',
 						'Message': 'Unknown Method Or Invalid Data Provided'
 					});
-					Reject('Unknown Method Or Invalid Data Provided');
+					Reject({
+						Message: 'Unknown Method Or Invalid Data Provided',
+						Code: {
+							App: 11007,
+							HTTP: 500
+						}
+					});	
 				}
 			} else {
 					Reporter({
@@ -285,7 +327,13 @@ module.exports = function(Bucket) {
 						'Group': 'ORM',
 						'Message': 'Cannot Find Model '+Name
 					});
-					Reject('Cannot Find Model');
+					Reject({
+						Message: 'Cannot Find Model',
+						Code: {
+							App: 11008,
+							HTTP: 500
+						}
+					});
 				}
 			} catch (E) {
 				/* Reject With Caught Error */
@@ -304,7 +352,7 @@ module.exports = function(Bucket) {
 						'Message': 'Unable To Perform View Query',
 						'Detail': E
 					});
-					Reject(E);
+					Reject();
 				} else if(Document.length == 0) {
 					Resolve(false);
 				} else {
@@ -318,7 +366,7 @@ module.exports = function(Bucket) {
 		return new RSVP.Promise(function(Resolve, Reject) {
 			Me.Bucket.get(ID, function(E, Document) {			
 				if (E) {
-					Reject(E);
+					Reject();
 				} else {
 					Resolve(Document);
 				}
@@ -326,6 +374,13 @@ module.exports = function(Bucket) {
 		});
 	}	
 	ORM.prototype.Set = function(Obj, Path, Value, Type, Options) {
+		function Camel(str) {
+		    str = this.toLowerCase();
+		    return str.replace(/(^([a-zA-Z\p{M}]))|([ -][a-zA-Z\p{M}])/g,
+		        function($1){
+		            return $1.toUpperCase();
+		        });
+		}
 		var Me = this;
 		return new RSVP.Promise(function(Resolve, Reject) {
 			if (!Obj) Reject('Missing Object');
@@ -342,7 +397,14 @@ module.exports = function(Bucket) {
 						SetProperty(Obj, Path, Value);
 						Resolve(Obj);
 					} else {
-						Reject('Invalid Email Address');
+						/* Reject Promise */
+						Reject({
+							Message: 'Invalid Email Address',
+							Code: {
+								App: 11009,
+								HTTP: 200
+							}
+						});
 					}
 				break;
 				case 'Password': 
@@ -351,10 +413,23 @@ module.exports = function(Bucket) {
 							SetProperty(Obj, Path, Value);
 							Resolve(Obj);						
 						}, function() {
-							Reject('Unable To Crypt Password');;	
+							Reject({
+								Message: 'Error Hashing String',
+								Code: {
+									App: 11014,
+									HTTP: 500
+								}
+							});	
 						});
 					} else {
-						Reject('Invalid Password');;
+						/* Reject Promise */
+						Reject({
+							Message: 'Invalid Password',
+							Code: {
+								App: 11010,
+								HTTP: 200
+							}
+						});
 					}
 				break;				
 				case 'Date': 
@@ -362,7 +437,14 @@ module.exports = function(Bucket) {
 						SetProperty(Obj, Path, Value);
 						Resolve(Obj);
 					} else {
-						Reject('Invalid Date');;
+						/* Reject Promise */
+						Reject({
+							Message: 'Invalid Date',
+							Code: {
+								App: 11011,
+								HTTP: 200
+							}
+						});
 					}
 				break;
 				case 'String': 
@@ -371,15 +453,42 @@ module.exports = function(Bucket) {
 					if (!Options.Max) Options.Max = 1000;
 					/* Validate */
 					if (Validator.isLength(Value, Options.Min, Options.Max)) { 
+						/* Check For Formatting Option */
+						if (Options.Format) { 
+							switch(Options.Format) {
+								case 'Lowercase':
+									Value = Value.toLowerCase();
+								break;
+								case 'Uppercase':
+									Value = Value.toUpperCase();
+								break;
+								case 'Camel':
+									Value = Camel(Value);
+								break;
+							}
+						}
 						SetProperty(Obj, Path, Value);
 						Resolve(Obj);
 					} else {
-						Reject('Incorrect String Length');
+						/* Reject Promise */
+						Reject({
+							Message: 'Incorrect String Length',
+							Code: {
+								App: 11012,
+								HTTP: 200
+							}
+						});
 					}
 				break;
 				default:
 					/* Reject Promise */
-					Reject('Invalid Type');
+					Reject({
+						Message: 'Invaild Data Type',
+						Code: {
+							App: 11013,
+							HTTP: 500
+						}
+					});
 				break;
 			}
 		});
