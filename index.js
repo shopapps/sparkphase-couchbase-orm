@@ -5,7 +5,7 @@
 	Repository: https://github.com/JonathanBristow/sparkphase-couchbase-orm
 */
 
-var RSVP	  = require('RSVP'),					// Promises Library
+var RSVP	  = require('rsvp'),					// Promises Library
 	Reporter  = require('sparkphase-reporter'),     // Error Logger & Debugger
 	Merge     = require('extend'),				    // Function For Merging Objects
 	Flake     = require('flake-idgen'),  		    // Flake ID Generator
