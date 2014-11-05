@@ -69,7 +69,7 @@ function SaveDocument(Bucket, Obj, Overwrite, Resolve, Reject) {
 	/* Check If Overwriting */
 	if (Overwrite === true) {
 		/* Overwrite Document */
-		Bucket.update(Obj.ID, Obj, function(E, Result) {
+		Bucket.replace(Obj.ID, Obj, function(E, Result) {
 			/* Check For Errors */
 			if (E) {
 				/* Report */
@@ -295,7 +295,7 @@ module.exports = function(Bucket) {
 						'Group': 'ORM',
 						'Message': 'Find "'+Name+'" With View "'+Model.ViewGroup+'.'+Data+'" And Key "'+ID+'"'
 					});
-					if (Model.Views.indexOf(Data) == 1) {
+					if (Model.Views.indexOf(Data) > -1) {
 						var Query = Me.ViewQuery.from(Model.ViewGroup, Data).stale(Me.ViewQuery.Update.BEFORE).key(ID);
 						Me.Query(Query).then(function(Document) {
 							if (Document) {
