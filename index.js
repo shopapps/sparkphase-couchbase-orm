@@ -5,7 +5,7 @@
 	Repository: https://github.com/JonathanBristow/sparkphase-couchbase-orm
 */
 
-var RSVP	  = require('rsvp'),					// Promises Library
+var RSVP	  = require('RSVP'),					// Promises Library
 	Reporter  = require('sparkphase-reporter'),     // Error Logger & Debugger
 	Merge     = require('extend'),				    // Function For Merging Objects
 	Flake     = require('flake-idgen'),  		    // Flake ID Generator
@@ -65,39 +65,79 @@ function GenerateFlakeID() {
 }
 
 /* Used To Save Documents To Couchbase */
-function SaveDocument(Bucket, Obj, Resolve, Reject) {
-	/* Attempt Save */
-	Bucket.insert(Obj.ID, Obj, function(E, Result) {
-		/* Check For Errors */
-		if (E) {
-			/* Is The ID Already In Use? */
-			if (E.code == 12) {
-				/* Generate New ID */
-				Obj.ID = GenerateFlakeID();
-				/* Retry */
-				Save(Bucket, Obj, Resolve, Reject);
-			} else {
+function SaveDocument(Bucket, Obj, Overwrite, Resolve, Reject) {
+	/* Check If Overwriting */
+	if (Overwrite === true) {
+		/* Overwrite Document */
+		Bucket.replace(Obj.ID, Obj, function(E, Result) {
+			/* Check For Errors */
+			if (E) {
 				/* Report */
 				Reporter({
 					'Type': 'Error',
 					'Group': 'ORM',
-					'Message':'Error Saving To Database',
+					'Message': 'Error Updating Document: '+Obj.ID,
 					'Detail': {Message: E, ID: Obj.ID, Document: Obj}
 				});
 				/* Reject */
 				Reject({
-					Message: 'Error Saving To Database',
+					Message: 'Error Updating Document: '+Obj.ID,
 					Code: {
-						App: 11003,
+						App: 11020,
 						HTTP: 500
 					}
-				});	
+				});				
+			} else {
+				/* Report */
+				Reporter({
+					'Type': 'Debug',
+					'Group': 'ORM',
+					'Message':'Successfully Updated Document ID: '+Obj.ID
+				})
+				/* Resolve */
+				Resolve(Obj);				
 			}
-		} else {
-			/* Resolve */
-			Resolve(Obj);
-		}
-	});	
+		});
+	} else {
+		/* Attempt Save */
+		Bucket.insert(Obj.ID, Obj, function(E, Result) {
+			/* Check For Errors */
+			if (E) {
+				/* Is The ID Already In Use? */
+				if (E.code == 12) {
+					/* Generate New ID */
+					Obj.ID = GenerateFlakeID();
+					/* Retry */
+					Save(Bucket, Obj, false, Resolve, Reject);
+				} else {
+					/* Report */
+					Reporter({
+						'Type': 'Error',
+						'Group': 'ORM',
+						'Message':'Error Saving To Database',
+						'Detail': {Message: E, ID: Obj.ID, Document: Obj}
+					});
+					/* Reject */
+					Reject({
+						Message: 'Error Saving To Database',
+						Code: {
+							App: 11003,
+							HTTP: 500
+						}
+					});	
+				}
+			} else {
+				/* Report */
+				Reporter({
+					'Type': 'Debug',
+					'Group': 'ORM',
+					'Message':'Successfully Created Document ID: '+Obj.ID
+				})
+				/* Resolve */
+				Resolve(Obj);
+			}
+		});
+	}
 }
 
 module.exports = function(Bucket) {
@@ -255,7 +295,7 @@ module.exports = function(Bucket) {
 						'Group': 'ORM',
 						'Message': 'Find "'+Name+'" With View "'+Model.ViewGroup+'.'+Data+'" And Key "'+ID+'"'
 					});
-					if (Model.Views.indexOf(Data) == 1) {
+					if (Model.Views.indexOf(Data) > -1) {
 						var Query = Me.ViewQuery.from(Model.ViewGroup, Data).stale(Me.ViewQuery.Update.BEFORE).key(ID);
 						Me.Query(Query).then(function(Document) {
 							if (Document) {
@@ -337,7 +377,13 @@ module.exports = function(Bucket) {
 				}
 			} catch (E) {
 				/* Reject With Caught Error */
-				Reject(E.message);
+				Reject({
+					Message: E.message,
+					Code: {
+						App: 11007,
+						HTTP: 500
+					}
+				});
 			}		
 		});
 	}
@@ -383,10 +429,34 @@ module.exports = function(Bucket) {
 		}
 		var Me = this;
 		return new RSVP.Promise(function(Resolve, Reject) {
-			if (!Obj) Reject('Missing Object');
-			if (!Path) Reject('Missing Path');
-			if (!Value) Reject('Missing Value');
-			if (!Type) Reject('Missing Type');
+			if (!Obj) Reject({
+				Message: 'Missing Object',
+				Code: {
+					App: 11019,
+					HTTP: 500
+				}
+			});				
+			if (!Path) Reject({
+				Message: 'Missing Path',
+				Code: {
+					App: 11018,
+					HTTP: 500
+				}
+			});	
+			if (!Value) Reject({
+				Message: 'Missing Value: "'+Path+'"',
+				Code: {
+					App: 11016,
+					HTTP: 500
+				}
+			});	
+			if (!Type) Reject({
+				Message: 'Missing Type',
+				Code: {
+					App: 11017,
+					HTTP: 500
+				}
+			});
 			if (!Options) Options = {};
 			if (!Obj[Path]) {
 				SetProperty(Obj, Path, false);
@@ -493,13 +563,13 @@ module.exports = function(Bucket) {
 			}
 		});
 	}
-	ORM.prototype.Save = function(Obj) {
+	ORM.prototype.Save = function(Obj, Overwrite) {
 		var Me = this;
 		return new RSVP.Promise(function(Resolve, Reject) {
 			if (!Obj.ID) {
 				Reject('Invalid ID');
 			} else {
-				SaveDocument(Me.Bucket, Obj, Resolve, Reject);				
+				SaveDocument(Me.Bucket, Obj, Overwrite, Resolve, Reject);				
 			}
 		});
 	}
