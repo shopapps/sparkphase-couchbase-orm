@@ -1,18 +1,19 @@
 /*
-	Sparkphase Couchbase ORM Version 0.1.0
-	Updated: Friday 17th October 2014
+	Sparkphase 
+	Couchbase ORM Version 0.1.0
 	Author: Jonathan Bristow <jonathanbristow@me.com>
 	Repository: https://github.com/JonathanBristow/sparkphase-couchbase-orm
 */
 
-var RSVP	  = require('RSVP'),					// Promises Library
-	Reporter  = require('sparkphase-reporter'),     // Error Logger & Debugger
-	Merge     = require('extend'),				    // Function For Merging Objects
-	Flake     = require('flake-idgen'),  		    // Flake ID Generator
-	IntFormat = require('biguint-format'),			// Int Formatter For Flake
-	Moment    = require('moment'),					// Date & Time Formatting Library
-	Validator = require('validator'),				// Validation Library
-	BCrypt	  = require('bcrypt');					// BCrypt Hashing Library
+var RSVP	   = require('RSVP'),					// Promises Library
+	Reporter   = require('sparkphase-reporter'),    // Error Logger & Debugger
+	Merge      = require('extend'),				    // Function For Merging Objects
+	Flake      = require('flake-idgen'),  		    // Flake ID Generator
+	IntFormat  = require('biguint-format'),			// Int Formatter For Flake
+	Moment     = require('moment'),					// Date & Time Formatting Library
+	Validator  = require('validator'),				// Validation Library
+	Underscore = require('underscore'),             // Utility Library
+	BCrypt	   = require('bcrypt');					// BCrypt Hashing Library
 
 /* Used To Set Properties In Nested Objects By Path */
 function SetProperty (Obj, Path, Value) {
@@ -108,7 +109,7 @@ function SaveDocument(Bucket, Obj, Overwrite, Resolve, Reject) {
 					/* Generate New ID */
 					Obj.ID = GenerateFlakeID();
 					/* Retry */
-					Save(Bucket, Obj, false, Resolve, Reject);
+					SaveDocument(Bucket, Obj, false, Resolve, Reject);
 				} else {
 					/* Report */
 					Reporter({
@@ -247,7 +248,30 @@ module.exports = function(Bucket) {
 				}
 			break;
 			case 'Blank':
-				return "";
+				switch (Type) {
+					case 'Array':
+						return [];
+					break;
+					case 'Object':
+						if (Options.Contains) {
+							if (this.Slices[Options.Contains]) {
+								return this.Slices[Options.Contains].Structure('Blank');
+							} else {
+								Reporter({
+									'Type': 'Error',
+									'Group': 'ORM',
+									'Message':'Unable To Find Slice: '+Options.Contains
+								});
+								return {};
+							}							
+						} else {
+							return {};
+						}
+					break;
+					default:
+						return "";
+					break;
+				}
 			break;
 			default:
 				Reporter({
@@ -267,7 +291,7 @@ module.exports = function(Bucket) {
 			*/
 			try {
 				if (Me.Models[Name]) {
-				var Model = Me.Models[Name];				
+				var Model = Me.Models[Name];			
 				if (Method == "New") {
 					Reporter({
 						'Type': 'Debug',
@@ -288,7 +312,7 @@ module.exports = function(Bucket) {
 						'Group': 'ORM',
 						'Message': 'Rebuilt '+Name+' Requested'
 					});
-					Resolve(Merge(true, Model.Structure, Data));									
+					Resolve(Merge(true, Model.Structure('Blank'), Data));									
 				} else if (Method == "Find" && typeof Data == "string" && ID) {
 					Reporter({
 						'Type': 'Debug',
@@ -297,14 +321,19 @@ module.exports = function(Bucket) {
 					});
 					if (Model.Views.indexOf(Data) > -1) {
 						var Query = Me.ViewQuery.from(Model.ViewGroup, Data).stale(Me.ViewQuery.Update.BEFORE).key(ID);
-						Me.Query(Query).then(function(Document) {
-							if (Document) {
+						Me.Query(Query).then(function(Documents) {
+							if (Documents) {
 								Reporter({
 									'Type': 'Debug',
 									'Group': 'ORM',
-									'Message': Document.length+' Result(s) For "'+ID+'" Using View "'+Model.ViewGroup+'.'+Data+'"'
-								});							
-								Resolve(Document);
+									'Message': Documents.length+' Result(s) For "'+ID+'" Using View "'+Model.ViewGroup+'.'+Data+'"'
+								});
+								/* Merge Documents With Models */
+								Underscore.each(Documents, function(Item, Key) {
+									/* Merge Document With Model */
+									Documents[Key].value = Merge(true, Model.Structure('Blank'), Documents[Key].value);
+								});					
+								Resolve(Documents);
 							} else {
 								Reporter({
 									'Type': 'Debug',
@@ -406,7 +435,27 @@ module.exports = function(Bucket) {
 				}	
 			});	
 		});
-	}	
+	}
+	ORM.prototype.View = function(ViewGroup, ViewName, Key) {
+		var Me = this;
+		return new RSVP.Promise(function(Resolve, Reject) {
+			Me.Bucket.query(Me.ViewQuery.from(ViewGroup, ViewName).stale(Me.ViewQuery.Update.BEFORE).key(Key), function(E, Document) {			
+				if(E) {
+					Reporter({
+						'Type': 'Error',
+						'Group': 'Couchbase',
+						'Message': 'Unable To Perform View Query',
+						'Detail': E
+					});
+					Reject();
+				} else if(Document.length == 0) {
+					Resolve(false);
+				} else {
+					Resolve(Document);			
+				}	
+			});	
+		});
+	}
 	ORM.prototype.ByID = function(ID) {
 		var Me = this;
 		return new RSVP.Promise(function(Resolve, Reject) {
@@ -444,7 +493,7 @@ module.exports = function(Bucket) {
 				}
 			});	
 			if (!Value) Reject({
-				Message: 'Missing Value: "'+Path+'"',
+				Message: 'Missing Value: '+Path,
 				Code: {
 					App: 11016,
 					HTTP: 500
@@ -573,6 +622,6 @@ module.exports = function(Bucket) {
 			}
 		});
 	}
-	
+
 	return new ORM;
 }
