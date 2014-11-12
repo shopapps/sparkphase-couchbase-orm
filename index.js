@@ -435,7 +435,27 @@ module.exports = function(Bucket) {
 				}	
 			});	
 		});
-	}	
+	}
+	ORM.prototype.View = function(ViewGroup, ViewName, Key) {
+		var Me = this;
+		return new RSVP.Promise(function(Resolve, Reject) {
+			Me.Bucket.query(Me.ViewQuery.from(ViewGroup, ViewName).stale(Me.ViewQuery.Update.BEFORE).key(Key), function(E, Document) {			
+				if(E) {
+					Reporter({
+						'Type': 'Error',
+						'Group': 'Couchbase',
+						'Message': 'Unable To Perform View Query',
+						'Detail': E
+					});
+					Reject();
+				} else if(Document.length == 0) {
+					Resolve(false);
+				} else {
+					Resolve(Document);			
+				}	
+			});	
+		});
+	}
 	ORM.prototype.ByID = function(ID) {
 		var Me = this;
 		return new RSVP.Promise(function(Resolve, Reject) {
